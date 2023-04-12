@@ -66,11 +66,11 @@ lgbm = LGBMRegressor()
 
 # 定义要搜索的参数网格
 param_grid = {
-    'n_estimators': [100, 2000, 5000],
-    'learning_rate': [0.01, 0.1, 0.2],
+    'n_estimators': [7000, 9000],
+    'learning_rate': [0.1,],
 #     'num_leaves': [31, 50],
-#     'max_depth': [-1, 3, 5],
-#     'min_child_samples': [20, 30]
+    'max_depth': [None, 17, 34],
+    # 'min_child_samples': [20, 30]
 }
 
 # 使用GridSearchCV搜索最佳参数
