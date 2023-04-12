@@ -4,6 +4,11 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import LabelEncoder
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression
+from catboost import CatBoostRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from xgboost import XGBRegressor
 
 train_data = pd.read_csv('./train.csv', parse_dates=['month'])
 test_data = pd.read_csv('./test.csv', parse_dates=['month'])
@@ -47,60 +52,120 @@ com_train_data.drop('month', axis=1, inplace=True)
 com_test_data['sell_time'] = com_test_data['month'].apply(lambda x: x.year + x.month / 12)
 com_test_data.drop('month', axis=1, inplace=True)
 
-# Run Model and Predict
+all_train_data = com_train_data
+all_test_data = com_test_data
+
+# # add age data
+# age_train_data = pd.read_csv('WithAge.csv')
+# age_train_data = age_train_data.loc[:, ["0-14", "15-29", "30-59", "60+"]]
+# all_train_data = pd.concat([com_train_data, age_train_data], axis=1, ignore_index=False)
+#
+# age_test_data = pd.read_csv("TestWithAge.csv")
+# age_test_data = age_test_data.loc[:, ["0-14", "15-29", "30-59", "60+"]]
+# all_test_data = pd.concat([com_test_data, age_test_data], axis=1, ignore_index=False)
+
+# use all_train_data and all_test_data
+
+all_train_data = all_train_data.dropna()
+
 # 对分类特征进行编码
 categorical_features = ['town', 'street_name', 'flat_model', 'subzone', 'region']
 for col in categorical_features:
     lbl = LabelEncoder()
-    com_train_data[col] = lbl.fit_transform(com_train_data[col])
+    all_train_data[col] = lbl.fit_transform(all_train_data[col])
 
-# 将数据分为特征和目标变量
-X = com_train_data.drop('resale_price', axis=1)
-y = com_train_data['resale_price']
 
-# 将数据集分为训练集和测试集
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# 创建LightGBM回归器
-lgbm = LGBMRegressor()
-
-# 定义要搜索的参数网格
-param_grid = {
-    'n_estimators': [7000, 9000],
-    'learning_rate': [0.1,],
-#     'num_leaves': [31, 50],
-    'max_depth': [None, 17, 34],
-    # 'min_child_samples': [20, 30]
-}
-
-# 使用GridSearchCV搜索最佳参数
-grid_search = GridSearchCV(lgbm, param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=-1)
-grid_search.fit(X_train, y_train)
-
-# 输出最佳参数
-print("最佳参数：", grid_search.best_params_)
-
-# 使用最佳参数重新训练模型
-best_lgbm = grid_search.best_estimator_
-best_lgbm.fit(X_train, y_train)
-
-# 进行预测
-y_pred = best_lgbm.predict(X_test)
-
-# 计算并输出均方误差
-mse = mean_squared_error(y_test, y_pred)
-print("均方误差：", mse)
-
-# 对com_test_data的分类特征进行编码，与训练数据集保持一致
+# 对all_test_data的分类特征进行编码，与训练数据集保持一致
 for col in categorical_features:
     lbl = LabelEncoder()
-    com_test_data[col] = lbl.fit_transform(com_test_data[col])
+    all_test_data[col] = lbl.fit_transform(all_test_data[col])
 
-# 使用训练好的模型进行预测
-test_pred = best_lgbm.predict(com_test_data)
 
-# 为预测结果创建一个新的DataFrame
-result_df = pd.DataFrame({'Id': np.arange(len(test_pred)), 'Predicted': test_pred})
+def evaluate(model, train, test):
+    # 将数据分为特征和目标变量
+    X = train.drop('resale_price', axis=1)
+    y = train['resale_price']
 
-# 将结果保存到CSV文件
-result_df.to_csv('predictions.csv', index=False)
+    # 将数据集分为训练集和测试集
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # 定义要搜索的参数网格
+    tree_param_grid = {
+        'n_estimators': [7000],
+        'learning_rate': [0.1, ],
+        #     'num_leaves': [31, 50],
+        # 'max_depth': [None, 15, 17, 19, 34],
+        'max_depth': [None, 17],
+        # 'min_child_samples': [20, 30]
+    }
+
+    linear_param_grid = {
+        'fit_intercept': [True, False],
+    }
+
+    catboost_param_grid = {
+        'iterations': [100, 200, 500],
+        'depth': [4, 6, 8],
+        'learning_rate': [0.01, 0.05, 0.1],
+        'loss_function': ['RMSE']
+    }
+
+    xbg_param_grid = {
+        'xgb__n_estimators': [100, 200, 500],
+        'xgb__max_depth': [4, 6, 8],
+        'xgb__learning_rate': [0.01, 0.05, 0.1]
+    }
+    preprocessing_pipeline = Pipeline([
+        ('scaler', StandardScaler())
+    ])
+    pipeline = Pipeline([
+        ('preprocessing', preprocessing_pipeline),
+        ('xgb', model)
+    ])
+
+    # 使用GridSearchCV搜索最佳参数
+    # grid_search = GridSearchCV(model, tree_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=-1)
+    # grid_search = GridSearchCV(model, linear_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=-1)
+    # grid_search = GridSearchCV(model, catboost_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=1)
+    grid_search = GridSearchCV(estimator=pipeline, param_grid=xbg_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1)
+
+    grid_search.fit(X_train, y_train)
+    # 输出最佳参数
+    print("最佳参数：", grid_search.best_params_)
+
+    # 使用最佳参数重新训练模型
+    best_model = grid_search.best_estimator_
+    best_model.fit(X_train, y_train)
+
+    # 进行预测
+    y_pred = best_model.predict(X_test)
+
+    # 计算并输出均方误差
+    mse = mean_squared_error(y_test, y_pred)
+    print("均方误差：", mse)
+
+    # 使用训练好的模型进行预测
+    test_pred = best_model.predict(test)
+
+    # 为预测结果创建一个新的DataFrame
+    result_df = pd.DataFrame({'Id': np.arange(len(test_pred)), 'Predicted': test_pred})
+
+    # 将结果保存到CSV文件
+    result_df.to_csv('predictions.csv', index=False)
+
+
+# LightGBM
+# lgbm = LGBMRegressor()
+# evaluate(lgbm, all_train_data, all_test_data)
+
+# Linear Regression
+# regressor = LinearRegression()
+# evaluate(regressor, all_train_data, all_test_data)
+
+# CatBoost
+# catboost_regressor = CatBoostRegressor()
+# evaluate(catboost_regressor, all_train_data, all_test_data)
+
+# XGBRegressor
+xgb_regressor = XGBRegressor()
+evaluate(xgb_regressor, all_train_data, all_test_data)
