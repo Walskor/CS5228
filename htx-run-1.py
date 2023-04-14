@@ -15,15 +15,14 @@ test_data = pd.read_csv('./test.csv', parse_dates=['month'])
 au_train_data = pd.read_csv('auxiliary-data/comCountTrain.csv')
 au_test_data = pd.read_csv('auxiliary-data/comCountTest.csv')
 
-train_data.drop(['block', 'eco_category', 'elevation', 'planning_area'], axis=1, inplace=True)
-test_data.drop(['block', 'eco_category', 'elevation', 'planning_area'], axis=1, inplace=True)
+train_data.drop(['block', 'eco_category', 'elevation', 'planning_area', 'street_name'], axis=1, inplace=True)
+test_data.drop(['block', 'eco_category', 'elevation', 'planning_area', 'street_name'], axis=1, inplace=True)
 au_test_data = au_test_data.loc[:, ["commercialCount_5","marketCount_3","shoppingCount_3","stationCount_2"]]
 au_train_data = au_train_data.loc[:, ["commercialCount_5","marketCount_3","shoppingCount_3","stationCount_2"]]
+all_train_data = pd.concat([train_data, au_train_data], axis=1, ignore_index=False)
+all_test_data = pd.concat([test_data, au_test_data], axis=1, ignore_index=False)
 
-com_train_data = pd.concat([train_data, au_train_data], axis=1, ignore_index=False)
-com_test_data = pd.concat([test_data, au_test_data], axis=1, ignore_index=False)
 
-# data preprocessing
 # convert flat_type to int
 def process_value(value):
     if value.startswith('e'):
@@ -34,8 +33,8 @@ def process_value(value):
         return int(value[0])
 
 
-com_train_data['flat_type'] = com_train_data['flat_type'].apply(process_value)
-com_test_data['flat_type'] = com_test_data['flat_type'].apply(process_value)
+all_train_data['flat_type'] = all_train_data['flat_type'].apply(process_value)
+all_test_data['flat_type'] = all_test_data['flat_type'].apply(process_value)
 
 # storey_range process
 def transfer(x):
@@ -43,41 +42,44 @@ def transfer(x):
     return int(int(storeys[0])+int(storeys[1]))/2
 
 
-com_train_data['storey_range'] = com_train_data['storey_range'].apply(transfer)
-com_test_data['storey_range'] = com_test_data['storey_range'].apply(transfer)
+all_train_data['storey_range'] = all_train_data['storey_range'].apply(transfer)
+all_test_data['storey_range'] = all_test_data['storey_range'].apply(transfer)
 
 # convert time to float
-com_train_data['sell_time'] = com_train_data['month'].apply(lambda x: x.year + x.month / 12)
-com_train_data.drop('month', axis=1, inplace=True)
-com_test_data['sell_time'] = com_test_data['month'].apply(lambda x: x.year + x.month / 12)
-com_test_data.drop('month', axis=1, inplace=True)
-
-all_train_data = com_train_data
-all_test_data = com_test_data
+all_train_data['sell_time'] = all_train_data['month'].apply(lambda x: x.year + x.month / 12)
+all_train_data.drop('month', axis=1, inplace=True)
+all_test_data['sell_time'] = all_test_data['month'].apply(lambda x: x.year + x.month / 12)
+all_test_data.drop('month', axis=1, inplace=True)
 
 # # add age data
-# age_train_data = pd.read_csv('WithAge.csv')
+# age_train_data = pd.read_csv('auxiliary-data/WithAge.csv')
 # age_train_data = age_train_data.loc[:, ["0-14", "15-29", "30-59", "60+"]]
-# all_train_data = pd.concat([com_train_data, age_train_data], axis=1, ignore_index=False)
-#
-# age_test_data = pd.read_csv("TestWithAge.csv")
+# all_train_data = pd.concat([all_train_data, age_train_data], axis=1, ignore_index=False)
+
+# age_test_data = pd.read_csv("auxiliary-data/TestWithAge.csv")
 # age_test_data = age_test_data.loc[:, ["0-14", "15-29", "30-59", "60+"]]
-# all_test_data = pd.concat([com_test_data, age_test_data], axis=1, ignore_index=False)
+# all_test_data = pd.concat([all_test_data, age_test_data], axis=1, ignore_index=False)
+
+# add school data, distance = 3
+school_train_data = pd.read_csv('auxiliary-data/schoolCountTrain_3.csv')
+school_train_data = school_train_data.loc[:, ["primaryCount", "secondaryCount"]]
+school_train_data.rename(columns={'primaryCount': 'primaryCount_3', 'secondaryCount': 'secondaryCount_3'}, inplace=True)
+all_train_data = pd.concat([all_train_data, school_train_data], axis=1, ignore_index=False)
+
+school_test_data = pd.read_csv('auxiliary-data/schoolCountTest_3.csv')
+school_test_data = school_test_data.loc[:, ['primaryCount_3', 'secondaryCount_3']]
+all_test_data = pd.concat([all_test_data, school_test_data], axis=1, ignore_index=False)
+
 
 # use all_train_data and all_test_data
 
 all_train_data = all_train_data.dropna()
 
 # 对分类特征进行编码
-categorical_features = ['town', 'street_name', 'flat_model', 'subzone', 'region']
+categorical_features = ['town', 'flat_model', 'subzone', 'region']
 for col in categorical_features:
     lbl = LabelEncoder()
     all_train_data[col] = lbl.fit_transform(all_train_data[col])
-
-
-# 对all_test_data的分类特征进行编码，与训练数据集保持一致
-for col in categorical_features:
-    lbl = LabelEncoder()
     all_test_data[col] = lbl.fit_transform(all_test_data[col])
 
 
@@ -91,12 +93,12 @@ def evaluate(model, train, test):
 
     # 定义要搜索的参数网格
     tree_param_grid = {
-        'n_estimators': [7000],
-        'learning_rate': [0.1, ],
+        'n_estimators': [10000],
+        'learning_rate': [0.1],
         #     'num_leaves': [31, 50],
-        # 'max_depth': [None, 15, 17, 19, 34],
-        'max_depth': [None, 17],
-        # 'min_child_samples': [20, 30]
+        # 'max_depth': [None, 15, 17, 19],
+        'max_depth': [None],
+        # 'min_child_samples': [20, 30, 50]
     }
 
     linear_param_grid = {
@@ -124,10 +126,10 @@ def evaluate(model, train, test):
     ])
 
     # 使用GridSearchCV搜索最佳参数
-    # grid_search = GridSearchCV(model, tree_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=-1)
+    # grid_search = GridSearchCV(model, tree_param_grid, scoring='neg_mean_squared_error', cv=3, verbose=1, n_jobs=-1)
     # grid_search = GridSearchCV(model, linear_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=-1)
     # grid_search = GridSearchCV(model, catboost_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=1)
-    grid_search = GridSearchCV(estimator=pipeline, param_grid=xbg_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1)
+    grid_search = GridSearchCV(estimator=pipeline, param_grid=xbg_param_grid, scoring='neg_mean_squared_error', cv=3, verbose=1)
 
     grid_search.fit(X_train, y_train)
     # 输出最佳参数
@@ -155,8 +157,8 @@ def evaluate(model, train, test):
 
 
 # LightGBM
-# lgbm = LGBMRegressor()
-# evaluate(lgbm, all_train_data, all_test_data)
+lgbm = LGBMRegressor()
+evaluate(lgbm, all_train_data, all_test_data)
 
 # Linear Regression
 # regressor = LinearRegression()
@@ -167,5 +169,5 @@ def evaluate(model, train, test):
 # evaluate(catboost_regressor, all_train_data, all_test_data)
 
 # XGBRegressor
-xgb_regressor = XGBRegressor()
-evaluate(xgb_regressor, all_train_data, all_test_data)
+# xgb_regressor = XGBRegressor()
+# evaluate(xgb_regressor, all_train_data, all_test_data)
