@@ -61,13 +61,13 @@ all_test_data.drop('month', axis=1, inplace=True)
 # all_test_data = pd.concat([all_test_data, age_test_data], axis=1, ignore_index=False)
 
 # add school data, distance = 3
-school_train_data = pd.read_csv('auxiliary-data/schoolCountTrain_3.csv')
+school_train_data = pd.read_csv('auxiliary-data/schoolCountTrain_1.csv')
 school_train_data = school_train_data.loc[:, ["primaryCount", "secondaryCount"]]
-school_train_data.rename(columns={'primaryCount': 'primaryCount_3', 'secondaryCount': 'secondaryCount_3'}, inplace=True)
+# school_train_data.rename(columns={'primaryCount': 'primaryCount_3', 'secondaryCount': 'secondaryCount_3'}, inplace=True)
 all_train_data = pd.concat([all_train_data, school_train_data], axis=1, ignore_index=False)
 
-school_test_data = pd.read_csv('auxiliary-data/schoolCountTest_3.csv')
-school_test_data = school_test_data.loc[:, ['primaryCount_3', 'secondaryCount_3']]
+school_test_data = pd.read_csv('auxiliary-data/schoolCountTest_1.csv')
+school_test_data = school_test_data.loc[:, ['primaryCount', 'secondaryCount']]
 all_test_data = pd.concat([all_test_data, school_test_data], axis=1, ignore_index=False)
 
 
@@ -106,9 +106,9 @@ def evaluate(model, train, test):
     }
 
     catboost_param_grid = {
-        'iterations': [100, 200, 500],
-        'depth': [4, 6, 8],
-        'learning_rate': [0.01, 0.05, 0.1],
+        'iterations': [500, 5000],
+        'depth': [10, 20, 30],
+        'learning_rate': [0.1],
         'loss_function': ['RMSE']
     }
 
@@ -128,8 +128,8 @@ def evaluate(model, train, test):
     # 使用GridSearchCV搜索最佳参数
     # grid_search = GridSearchCV(model, tree_param_grid, scoring='neg_mean_squared_error', cv=3, verbose=1, n_jobs=-1)
     # grid_search = GridSearchCV(model, linear_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=-1)
-    # grid_search = GridSearchCV(model, catboost_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=1)
-    grid_search = GridSearchCV(estimator=pipeline, param_grid=xbg_param_grid, scoring='neg_mean_squared_error', cv=3, verbose=1)
+    grid_search = GridSearchCV(model, catboost_param_grid, scoring='neg_mean_squared_error', cv=5, verbose=1, n_jobs=1)
+    # grid_search = GridSearchCV(estimator=pipeline, param_grid=xbg_param_grid, scoring='neg_mean_squared_error', cv=3, verbose=1)
 
     grid_search.fit(X_train, y_train)
     # 输出最佳参数
@@ -157,16 +157,16 @@ def evaluate(model, train, test):
 
 
 # LightGBM
-lgbm = LGBMRegressor()
-evaluate(lgbm, all_train_data, all_test_data)
+# lgbm = LGBMRegressor()
+# evaluate(lgbm, all_train_data, all_test_data)
 
 # Linear Regression
 # regressor = LinearRegression()
 # evaluate(regressor, all_train_data, all_test_data)
 
 # CatBoost
-# catboost_regressor = CatBoostRegressor()
-# evaluate(catboost_regressor, all_train_data, all_test_data)
+catboost_regressor = CatBoostRegressor()
+evaluate(catboost_regressor, all_train_data, all_test_data)
 
 # XGBRegressor
 # xgb_regressor = XGBRegressor()
